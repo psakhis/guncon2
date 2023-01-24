@@ -17,12 +17,14 @@ Install
        Example:
          -x=(175,720) -y=(9,249)
          
-    b) You can see mapped GunCon2 to vjoy device   
+    b) You can see mapped GunCon2 to vjoy device 
     
-    c) Any key to exit daemon
+    c) You can set as a mouse with -m=(width,height). You need set resolution
+    
+    d) Q key to exit daemon
       
  
 TO DO:
- * Mouse simulation
- * Update libusb when async works on it. Probably speed up some frames.
+ * Additional gun for 2p
+ 
  
