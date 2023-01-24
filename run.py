@@ -14,6 +14,7 @@ import usb.util
 import usb1
 
 import pyvjoy
+import pydirectinput
 
 import logging
 
@@ -142,24 +143,31 @@ def wait_key(key=None, *, pre_flush=False, post_flush=True) -> str:
 
 
 class Guncon2(object):
-    def __init__(self, device, mX, MX, mY, MY, scale):
+    def __init__(self, device, mX, MX, mY, MY, scale, width, height):
         self.device = device
-        self.pos = Postion(0, 0)        
+        self.pos = Postion(0, 0)                
         self.X_MIN = mX
         self.X_MAX = MX
         self.Y_MIN = mY
         self.Y_MAX = MY
         self.center = Postion(self.max_x/2, self.max_y/2)
-        self.trigger = False      
+        self.trigger = False
+        self.prev_trigger = False      
         self.start = False
-        self.select = False
+        self.prev_start = False
+        self.select = False        
         self.A = False
+        self.prev_A = False
         self.B = False
         self.C = False
         self.padX = 0
         self.padY = 0
         self.j = pyvjoy.VJoyDevice(1) 
         self.scale = scale
+        pydirectinput.PAUSE = False
+        pydirectinput.FAILSAFE = False   
+        self.width = width
+        self.height = height
         #PyUSB
         """
         self.device.set_configuration()
@@ -194,8 +202,8 @@ class Guncon2(object):
 
     @property
     def max_y(self):        
-        return self.Y_MAX
-
+        return self.Y_MAX            
+                       
     @property
     def pos_normalised(self):      
         return Postion(self.normalise(self.pos.x, self.min_x, self.max_x),
@@ -208,14 +216,17 @@ class Guncon2(object):
     
     def mapData(self,data):
         #Axis
-        gunX = data[3];
-        gunX <<= 8;
-        gunX |= data[2];         
-        gunY = data[5];
-        gunY <<= 8;
-        gunY |= data[4];
+        gunX = data[3]
+        gunX <<= 8
+        gunX |= data[2]       
+        gunY = data[5]
+        gunY <<= 8
+        gunY |= data[4]        
         self.pos = Postion(gunX, gunY) 
         
+        self.prev_trigger = self.trigger
+        self.prev_start = self.start
+        self.prev_A = self.A
         #Buttons
         self.trigger = ((data[1] & 0x20) == 0)            
         self.A = ((data[0] & 0x08) == 0)
@@ -240,6 +251,29 @@ class Guncon2(object):
                self.padX = 1
            else:
                self.padX = 0   
+    
+    def updateMouse(self):       
+        if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
+            pydirectinput.moveTo(-65536,-65536)            
+        else:                     
+            x = int(float(self.width * self.pos_normalised[0]))
+            y = int(float(self.height * self.pos_normalised[1]))          
+            pydirectinput.moveTo(x,y)
+            
+        if self.trigger and self.prev_trigger == False:     
+           pydirectinput.mouseDown()  
+        if self.trigger == False and self.prev_trigger:     
+           pydirectinput.mouseUp()  
+        
+        if self.start and self.prev_start == False:     
+           pydirectinput.mouseDown(button="middle")  
+        if self.start == False and self.prev_start:     
+           pydirectinput.mouseUp(button="middle")  
+              
+        if self.A and self.prev_A == False:     
+           pydirectinput.mouseDown(button="right")  
+        if self.A == False and self.prev_A:     
+           pydirectinput.mouseUp(button="right")         
                
     def updateVjoy(self):
         global start_time        
@@ -305,6 +339,8 @@ class Guncon2(object):
            return
         data = transfer.getBuffer()[:transfer.getActualLength()]
         self.mapData(data)
+        if self.width > 0 and self.height > 0:
+           self.updateMouse()
         self.updateVjoy()       
         transfer.submit()           
      
@@ -361,6 +397,7 @@ def main():
     parser.add_argument("-x", default=(175, 720), type=point_type)
     parser.add_argument("-y", default=(20, 240), type=point_type)  
     parser.add_argument("-scale", default=32768, type=int)  
+    parser.add_argument("-m", default=(0, 0), type=point_type)  
     #parser.add_argument("-log", default=False, type=bool)  
     args = parser.parse_args()
 
@@ -379,10 +416,10 @@ def main():
             sys.stderr.write("Failed to find any attached GunCon2 devices")
             return 1        
         with handle.claimInterface(0) as ep:            
-            guncon = Guncon2(None,args.x[0],args.x[1],args.y[0],args.y[1],args.scale)                       
+            guncon = Guncon2(None,args.x[0],args.x[1],args.y[0],args.y[1],args.scale,args.m[0],args.m[1])                       
             handle.controlWrite(request_type=0x21, request=0x09, value=0x200, index=0, data=guncon.getCommand(0,0), timeout=100000)                                    
             log.info("GunCon2 device attached")
-            log.info("Daemon running: press any key to exit")              
+            log.info("Daemon running: press Q key to exit")              
             transfer = handle.getTransfer()
             transfer.setBulk(0x81, 6, guncon.updateAsync)
             transfer.submit()
@@ -390,7 +427,7 @@ def main():
             running = True               
             while transfer.isSubmitted() and running:
                 try:
-                  if key_pressed():
+                  if key_pressed("q") or key_pressed("Q"):
                     running = False
                   context.handleEvents()                           
                 except usb1.USBErrorInterrupted:
