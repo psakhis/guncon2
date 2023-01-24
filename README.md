@@ -19,7 +19,7 @@ Install
          
     b) You can see mapped GunCon2 to vjoy device   
     
-    c) With Ctrl+C for exit daemon 
+    c) Any key to exit daemon
       
  
 TO DO:
