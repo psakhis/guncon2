@@ -19,7 +19,7 @@ Install
          
     b) You can see mapped GunCon2 to vjoy device 
     
-    c) You can set as a mouse with -m=(width,height). You need set resolution
+    c) You can set as a mouse with -m=(width,height). You need set screen resolution
     
     d) Q key to exit daemon
       
