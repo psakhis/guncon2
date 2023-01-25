@@ -14,10 +14,12 @@ Install
  2) Run daemon
  
     a) By default, daemon runs on x and y ABS settings, you can provide other with args
+    
        Example:
          -x=(175,720) -y=(9,249)
     
     b) For a more GunCon2 devices, set index (by default index=1)
+    
        Example:
          -index=2
     
