@@ -229,7 +229,7 @@ class Guncon2(object):
         return (pos - min_) / float(max_ - min_)
     
     
-    def mapData(self,data):
+    def mapData(self,data):             
         #Axis
         gunX = data[3]
         gunX <<= 8
@@ -266,7 +266,16 @@ class Guncon2(object):
                self.padX = 1
            else:
                self.padX = 0   
-    
+         
+        if self.C and self.padX == 1:           
+            self.X_MIN = self.X_MIN - 0x01
+        if self.C and self.padX == -1:           
+            self.X_MIN = self.X_MIN + 0x01   
+        if self.C and self.padY == 1:           
+            self.X_MAX = self.X_MAX - 0x01
+        if self.C and self.padY == -1:                    
+            self.X_MAX = self.X_MAX + 0x01
+         
     def updateMouse(self):       
         if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
             pydirectinput.moveTo(-65536,-65536)            
@@ -401,7 +410,7 @@ class Guncon2(object):
     """
 
 def libusb_guncon(args):
-    #LIBUSB1 async method    
+    #LIBUSB1 async method      
     with usb1.USBContext() as context:      
         handle = openDeviceHandle(context, 0x0b9a, 0x016a, args.index)      
         if handle is None: 
@@ -416,7 +425,7 @@ def libusb_guncon(args):
         transfer.setBulk(0x81, 6, guncon.updateAsync)
         transfer.submit()
         #start_time = time.time()            
-        running = True 
+        running = True       
         try:              
             while transfer.isSubmitted() and running:
                 try:

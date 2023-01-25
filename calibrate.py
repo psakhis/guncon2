@@ -27,10 +27,10 @@ class Guncon2(object):
     def __init__(self, device):
         self.device = device
         self.pos = Postion(0, 0)        
-        self.X_MIN = 175
-        self.X_MAX = 720
-        self.Y_MIN = 20
-        self.Y_MAX = 240
+        self.X_MIN = 161
+        self.X_MAX = 718
+        self.Y_MIN = 9
+        self.Y_MAX = 249
         self.center = Postion(self.max_x/2, self.max_y/2)
         self.trigger = False      
         self.A1 = False
@@ -135,7 +135,8 @@ class Guncon2(object):
 
         # calculate the ratio between on-screen units and gun units for each axes
         try:
-            gsratio_x = (max(targets_x) - min(targets_x)) / (max(shots_x) - min(shots_x))
+            #gsratio_x = (max(targets_x) - min(targets_x)) / (max(shots_x) - min(shots_x))
+            gsratio_x = (max(shots_x) - min(shots_x)) / (385 - (width - max(targets_x) + min(targets_x)))     #8MHZ precision
         except ZeroDivisionError:
             log.error("Failed to calibrate X axis")
             return
@@ -144,9 +145,9 @@ class Guncon2(object):
         except ZeroDivisionError:
             log.error("Failed to calibrate X axis")
             return
-
+                
         min_x = min(shots_x) - (min(targets_x) * gsratio_x)
-        max_x = max(shots_x) + ((width - max(targets_x)) * gsratio_x * 2)
+        max_x = max(shots_x) + ((width - max(targets_x)) * gsratio_x)
 
         min_y = min(shots_y) - (min(targets_y) * gsratio_y)
         max_y = max(shots_y) + ((height - max(targets_y)) * gsratio_y)
