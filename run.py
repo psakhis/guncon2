@@ -3,29 +3,26 @@ import re
 import sys
 import time
 from collections import namedtuple
-from math import floor, ceil
-from queue import Queue
 import contextlib as _contextlib
-
-
-import usb.core
-import usb.util
-
-import usb1
-
 import pyvjoy
 import pydirectinput
-
 import logging
+import usb1
+
+#PyUSB (import for use that)
+"""
+import usb.core
+import usb.util
+"""
 
 log = logging.getLogger("guncon2-daemon")
 
-Postion = namedtuple("Postion", ["x", "y"])
+Postion = namedtuple("Postion", ["x","y"])
 
-start_time = time.time() 
+#start_time = time.time() 
 
 #https://stackoverflow.com/questions/24072790/how-to-detect-key-presses
-
+########################################################################################
 try:
     import msvcrt as _msvcrt
 
@@ -140,17 +137,33 @@ def wait_key(key=None, *, pre_flush=False, post_flush=True) -> str:
             _flush()
 
         return key
+        
+############################################################################################
 
+def openDeviceHandle(context, vendor_id, product_id, device_index=1):
+    order = 0    
+    device_iterator = context.getDeviceIterator(skip_on_error=True)
+    try:
+        for device in device_iterator:
+                if device.getVendorID() == vendor_id and \
+                        device.getProductID() == product_id:
+                    order = order + 1
+                    if order == device_index:    
+                        return device.open()                    
+                device.close()
+    finally:
+        device_iterator.close()
+    return None           
 
 class Guncon2(object):
-    def __init__(self, device, mX, MX, mY, MY, scale, width, height):
+    def __init__(self, device, mX, MX, mY, MY, scale, width, height, index):
         self.device = device
         self.pos = Postion(0, 0)                
         self.X_MIN = mX
         self.X_MAX = MX
         self.Y_MIN = mY
         self.Y_MAX = MY
-        self.center = Postion(self.max_x/2, self.max_y/2)
+        #self.center = Postion(self.max_x/2, self.max_y/2)
         self.trigger = False
         self.prev_trigger = False      
         self.start = False
@@ -162,10 +175,10 @@ class Guncon2(object):
         self.C = False
         self.padX = 0
         self.padY = 0
-        self.j = pyvjoy.VJoyDevice(1) 
-        self.scale = scale
+        self.j = pyvjoy.VJoyDevice(index)         
         pydirectinput.PAUSE = False
-        pydirectinput.FAILSAFE = False   
+        pydirectinput.FAILSAFE = False
+        self.scale = scale   
         self.width = width
         self.height = height
         #PyUSB
@@ -179,11 +192,13 @@ class Guncon2(object):
         """
         
         
-        
-    def __del__(self):
+    """    
+    def __del__(self):    
+    
         if self.device is not None:
             usb.util.dispose_resources(self.device)   #PyUSB
-        
+    """        
+    
     @property
     def absinfo(self):       
         return [(self.X_MIN, self.X_MAX), (self.Y_MIN, self.Y_MAX)]
@@ -276,7 +291,7 @@ class Guncon2(object):
            pydirectinput.mouseUp(button="right")         
                
     def updateVjoy(self):
-        global start_time        
+        #global start_time        
         if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
             self.j.data.wAxisX = 0
             self.j.data.wAxisY = 0            
@@ -384,7 +399,36 @@ class Guncon2(object):
          self.connect(x=0, y=0)  
          return self.update()           
     """
-    
+
+def libusb_guncon(args):
+    #LIBUSB1 async method    
+    with usb1.USBContext() as context:      
+        handle = openDeviceHandle(context, 0x0b9a, 0x016a, args.index)      
+        if handle is None: 
+            sys.stderr.write("Failed to find any attached GunCon2 device")
+            sys.exit(0)             
+        handle.claimInterface(0)          
+        guncon = Guncon2(None, args.x[0], args.x[1], args.y[0], args.y[1], args.scale, args.m[0], args.m[1], args.index)                       
+        handle.controlWrite(request_type=0x21, request=0x09, value=0x200, index=0, data=guncon.getCommand(0,0), timeout=100000)                                    
+        log.info("Device attached")
+        log.info("Press Q key to exit")              
+        transfer = handle.getTransfer()
+        transfer.setBulk(0x81, 6, guncon.updateAsync)
+        transfer.submit()
+        #start_time = time.time()            
+        running = True 
+        try:              
+            while transfer.isSubmitted() and running:
+                try:
+                  if key_pressed("q") or key_pressed("Q"):
+                    running = False
+                  context.handleEvents()                           
+                except usb1.USBErrorInterrupted:                 
+                  pass
+        finally:
+            handle.releaseInterface(0)  
+        return running
+                           
 def main():
     def point_type(value):
         m = re.match(r"\(?(\d+)\s*,\s*(\d+)\)?", value)
@@ -394,45 +438,23 @@ def main():
             raise ValueError("{} is an invalid point".format(value))
 
     parser = argparse.ArgumentParser()      
+    parser.add_argument("-index", default=1, type=int)      
     parser.add_argument("-x", default=(175, 720), type=point_type)
     parser.add_argument("-y", default=(20, 240), type=point_type)  
     parser.add_argument("-scale", default=32768, type=int)  
-    parser.add_argument("-m", default=(0, 0), type=point_type)  
-    #parser.add_argument("-log", default=False, type=bool)  
+    parser.add_argument("-m", default=(0, 0), type=point_type)      
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)   
+    log.info("Using device index={}".format(args.index))
     log.info("Using calibration x=({},{}) y=({},{})".format(args.x[0],args.x[1],args.y[0],args.y[1]))
-    log.info("Using analog scale = {}".format(args.scale))              
-    
-    #LIBUSB1 async method    
-    with usb1.USBContext() as context:
-        handle = context.openByVendorIDAndProductID(
-            0x0b9a,
-            0x016a,
-            skip_on_error=True,
-        )
-        if handle is None: 
-            sys.stderr.write("Failed to find any attached GunCon2 devices")
-            return 1        
-        with handle.claimInterface(0) as ep:            
-            guncon = Guncon2(None,args.x[0],args.x[1],args.y[0],args.y[1],args.scale,args.m[0],args.m[1])                       
-            handle.controlWrite(request_type=0x21, request=0x09, value=0x200, index=0, data=guncon.getCommand(0,0), timeout=100000)                                    
-            log.info("GunCon2 device attached")
-            log.info("Daemon running: press Q key to exit")              
-            transfer = handle.getTransfer()
-            transfer.setBulk(0x81, 6, guncon.updateAsync)
-            transfer.submit()
-            start_time = time.time()            
-            running = True               
-            while transfer.isSubmitted() and running:
-                try:
-                  if key_pressed("q") or key_pressed("Q"):
-                    running = False
-                  context.handleEvents()                           
-                except usb1.USBErrorInterrupted:
-                  pass
-    
+    log.info("Using analog scale={}".format(args.scale))              
+    if args.m[0] > 0 and args.m[1] > 0:
+        log.info("Using mouse resolution m=({},{})".format(args.m[0],args.m[1]))              
+        
+    main_thread = True
+    while (main_thread):      
+        main_thread=libusb_guncon(args)
     
     #old PyUSB (only sync)
     """    
