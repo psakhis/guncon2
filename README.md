@@ -16,15 +16,17 @@ Install
     a) By default, daemon runs on x and y ABS settings, you can provide other with args
        Example:
          -x=(175,720) -y=(9,249)
-         
-    b) You can see mapped GunCon2 to vjoy device 
     
-    c) You can set as a mouse with -m=(width,height). You need set screen resolution
+    b) For a more GunCon2 devices, set index (by default index=1)
+       Example:
+         -index=2
     
-    d) Q key to exit daemon
+    c) You can see mapped GunCon2 to vjoy device 
+    
+    d) You can set as a mouse with -m=(width,height). You need set screen resolution
+    
+    e) Q key to exit daemon
       
  
-TO DO:
- * Additional gun for 2p
  
  
