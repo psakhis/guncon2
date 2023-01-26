@@ -26,23 +26,23 @@ class Guncon2(object):
 
     @property
     def absinfo(self):
-        return [self.device.absinfo(ecodes.ABS_X), self.device.absinfo(ecodes.ABS_Y)]
+        return [self.device.absinfo(ecodes.ABS_RX), self.device.absinfo(ecodes.ABS_RY)]
 
     @property
     def min_x(self):
-        return self.device.absinfo(ecodes.ABS_X).min
+        return self.device.absinfo(ecodes.ABS_RX).min
 
     @property
     def max_x(self):
-        return self.device.absinfo(ecodes.ABS_X).max
+        return self.device.absinfo(ecodes.ABS_RX).max
 
     @property
     def min_y(self):
-        return self.device.absinfo(ecodes.ABS_Y).min
+        return self.device.absinfo(ecodes.ABS_RY).min
 
     @property
     def max_y(self):
-        return self.device.absinfo(ecodes.ABS_Y).max
+        return self.device.absinfo(ecodes.ABS_RY).max
 
     @property
     def pos_normalised(self):

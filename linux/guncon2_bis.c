@@ -37,6 +37,14 @@
 #define Y_MIN 20
 #define Y_MAX 240
 
+// normalized values to report
+#define XN_MIN 0
+#define XN_MAX 65535
+#define YN_MIN 0
+#define YN_MAX 65535
+#define OFFSCREEN -65536
+
+
 struct guncon2 {
     struct input_dev *input_device;
     struct usb_interface *intf;
@@ -62,7 +70,10 @@ static void guncon2_usb_irq(struct urb *urb) {
     unsigned short x, y;
     signed char hat_x = 0;
     signed char hat_y = 0;    
-    unsigned short _X_MIN, _X_MAX;
+    unsigned short x_min, x_max, y_min, y_max;     
+    unsigned short rx, ry;
+    unsigned long nx, ny;
+    
 
     switch (urb->status) {
         case 0:
@@ -92,9 +103,10 @@ static void guncon2_usb_irq(struct urb *urb) {
         /* Aiming */
         x = (data[3] << 8) | data[2];
         y = data[4];
-
-        input_report_abs(guncon2->input_device, ABS_X, x);
-        input_report_abs(guncon2->input_device, ABS_Y, y);
+        
+        //psakhis - apply normalized values       
+        //input_report_abs(guncon2->input_device, ABS_X, x);
+        //input_report_abs(guncon2->input_device, ABS_Y, y);                          
 
         /* Buttons */
         buttons = ((data[0] << 8) | data[1]) ^ 0xffff;
@@ -123,38 +135,55 @@ static void guncon2_usb_irq(struct urb *urb) {
         input_report_key(guncon2->input_device, BTN_B, buttons & GUNCON2_BTN_B);
         input_report_key(guncon2->input_device, BTN_C, buttons & GUNCON2_BTN_C);
         input_report_key(guncon2->input_device, BTN_START, buttons & GUNCON2_BTN_START);
-        input_report_key(guncon2->input_device, BTN_SELECT, buttons & GUNCON2_BTN_SELECT);
-        
-        //micro calibration        
+        input_report_key(guncon2->input_device, BTN_SELECT, buttons & GUNCON2_BTN_SELECT);               	
+
+        x_min = input_abs_get_min(guncon2->input_device, ABS_RX);	
+        x_max = input_abs_get_max(guncon2->input_device, ABS_RX); 	
+        y_min = input_abs_get_min(guncon2->input_device, ABS_RY);	
+        y_max = input_abs_get_max(guncon2->input_device, ABS_RY);  
+        //micro calibration       
         if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_LEFT)) {
-            _X_MIN = input_abs_get_min(guncon2->input_device, ABS_X) - 1;	
-            _X_MAX = input_abs_get_max(guncon2->input_device, ABS_X); 	
-            input_set_abs_params(guncon2->input_device, ABS_X, _X_MIN, _X_MAX, 0, 0);
+            x_min--;	                       
             guncon2->is_recalibrate = true;
         }	
         if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_RIGHT)) {
-            _X_MIN = input_abs_get_min(guncon2->input_device, ABS_X) + 1;	
-            _X_MAX = input_abs_get_max(guncon2->input_device, ABS_X); 	
-            input_set_abs_params(guncon2->input_device, ABS_X, _X_MIN, _X_MAX, 0, 0);
+            x_min++;	                     
             guncon2->is_recalibrate = true;
         }
-        if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_UP)) {
-            _X_MIN = input_abs_get_min(guncon2->input_device, ABS_X);	
-            _X_MAX = input_abs_get_max(guncon2->input_device, ABS_X) + 1; 	
-            input_set_abs_params(guncon2->input_device, ABS_X, _X_MIN, _X_MAX, 0, 0);
+        if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_UP)) {          
+            x_max--; 	            
             guncon2->is_recalibrate = true;
         }	
-        if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_DOWN)) {
-            _X_MIN = input_abs_get_min(guncon2->input_device, ABS_X);	
-            _X_MAX = input_abs_get_max(guncon2->input_device, ABS_X) - 1; 	
-            input_set_abs_params(guncon2->input_device, ABS_X, _X_MIN, _X_MAX, 0, 0);
+        if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_DOWN)) {            
+            x_max--; 	          
             guncon2->is_recalibrate = true;
         }
-	
+        if (guncon2->is_recalibrate) {
+            input_set_abs_params(guncon2->input_device, ABS_RX, x_min, x_max, 0, 0);            
+        }
         if (hat_x == 0 && hat_y == 0) {
             guncon2->is_recalibrate = false;
         }
         // end micro calibration
+
+        // psakhis: apply normalized values
+        rx = x_max - x_min;
+        if (x < x_min || x > x_max || rx == 0) {
+            input_report_abs(guncon2->input_device, ABS_X, OFFSCREEN);
+        } else {
+            nx = (x - x_min) << 16;
+            do_div(nx, rx);      
+            input_report_abs(guncon2->input_device, ABS_X, nx);
+        } 
+         ry = y_max - y_min;
+         if (y < y_min || y > y_max || ry == 0) {
+            input_report_abs(guncon2->input_device, ABS_Y, OFFSCREEN);
+        } else {
+            ny = (y - y_min) << 16;
+            do_div(ny, ry);      
+            input_report_abs(guncon2->input_device, ABS_Y, ny);
+        } 
+        // end psakhis
 
         input_sync(guncon2->input_device);
     }
@@ -292,8 +321,12 @@ static int guncon2_probe(struct usb_interface *intf,
     input_set_capability(guncon2->input_device, EV_ABS, ABS_X);
     input_set_capability(guncon2->input_device, EV_ABS, ABS_Y);
 
-    input_set_abs_params(guncon2->input_device, ABS_X, X_MIN, X_MAX, 0, 0);
-    input_set_abs_params(guncon2->input_device, ABS_Y, Y_MIN, Y_MAX, 0, 0);
+    input_set_abs_params(guncon2->input_device, ABS_X, XN_MIN, XN_MAX, 0, 0);
+    input_set_abs_params(guncon2->input_device, ABS_Y, YN_MIN, YN_MAX, 0, 0);
+    
+    //psakhis - store values on right analog    
+    input_set_abs_params(guncon2->input_device, ABS_RX, X_MIN, X_MAX, 0, 0);
+    input_set_abs_params(guncon2->input_device, ABS_RY, Y_MIN, Y_MAX, 0, 0);    
 
     input_set_capability(guncon2->input_device, EV_KEY, BTN_A);
     input_set_capability(guncon2->input_device, EV_KEY, BTN_B);
