@@ -27,7 +27,9 @@ Install
     
     d) You can set as a mouse with -m=(width,height). You need set screen resolution
     
-    e) Q key to exit daemon
+    e) Pressing C-Button and D-PAD directions you can recalibrate X-Axis on run-time (very useful inside games)
+    
+    f) Q key to exit daemon
       
  
  
