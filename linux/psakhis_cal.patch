@@ -1,0 +1,12 @@
+--- calibrate.py	2023-01-26 12:43:20.536635974 +0000
++++ calibrate_bis.py	2023-01-26 11:39:06.000000000 +0000
+@@ -75,7 +75,8 @@
+ 
+         # calculate the ratio between on-screen units and gun units for each axes
+         try:
+-            gsratio_x = (max(targets_x) - min(targets_x)) / (max(shots_x) - min(shots_x))
++            #gsratio_x = (max(targets_x) - min(targets_x)) / (max(shots_x) - min(shots_x))
++            gsratio_x = (max(shots_x) - min(shots_x)) / (385 - (width - max(targets_x) + min(targets_x)))     #8MHZ precision
+         except ZeroDivisionError:
+             log.error("Failed to calibrate X axis")
+             return

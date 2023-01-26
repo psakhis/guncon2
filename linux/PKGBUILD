@@ -1,0 +1,41 @@
+# Maintainer: foo <foo(at)example(dot)org>
+# Contributor: bar <bar(at)example(dot)org>
+
+_pkgbase=guncon2
+_commitid=e50b612d7c77879fb3df9402a3eaa88a5526fe3f
+pkgname=${_pkgbase}-dkms
+pkgver=0.1
+pkgrel=1
+pkgdesc="Linux driver for the GunCon 2 light gun (DKMS)"
+arch=('i686' 'x86_64')
+url="https://github.com/beardypig/guncon2"
+license=('GPL2')
+depends=('dkms' "python-pygame" "python-evdev" "linuxconsole")
+#install=${pkgname}.install
+source=("${_pkgbase}-${pkgver}::git+https://github.com/beardypig/guncon2.git#commit=${_commitid}" "dkms.conf")
+md5sums=('SKIP' 'SKIP')
+
+#prepare() {
+  cd src/${_pkgbase}-${pkgver}
+
+  # Patch
+  #patch -p1 -i "${srcdir}"/linux-3.14.patch
+  ./patch.sh
+  patch guncon2.c < psakhis.patch
+  patch calibrate.py < psakhis_cal.patch
+  
+#}
+
+
+package() {
+  local dest="${pkgdir}"/usr/src/"${_pkgbase}"-"${pkgver}"
+  install -Dm644 ${_pkgbase}-${pkgver}/calibrate.py "${pkgdir}"/usr/local/bin/calibrate.py
+  install -Dm644 ${_pkgbase}-${pkgver}/guncon2.c "$dest/guncon2.c"
+  install -Dm644 ${_pkgbase}-${pkgver}/modules.order "$dest/modules.order"
+  install -Dm644 dkms.conf "$dest/dkms.conf"
+  install -Dm644 ${_pkgbase}-${pkgver}/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  sed -e "s/@_PKGBASE@/${_pkgbase}/" \
+      -e "s/@PKGVER@/${pkgver}/" \
+      -i "${dest}"/dkms.conf
+  install -Dm644 ${_pkgbase}-${pkgver}/Makefile "$dest/Makefile"
+}
