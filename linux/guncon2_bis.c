@@ -38,11 +38,12 @@
 #define Y_MAX 240
 
 // normalized values to report
-#define XN_MIN 0
-#define XN_MAX 65535
-#define YN_MIN 0
-#define YN_MAX 65535
-#define OFFSCREEN -65536
+#define XN_MIN -32768
+#define XN_MAX 32767
+#define YN_MIN -32768
+#define YN_MAX 32767
+#define OFFSCREEN -65536 
+#define CENTER 32768
 
 
 struct guncon2 {
@@ -104,9 +105,10 @@ static void guncon2_usb_irq(struct urb *urb) {
         x = (data[3] << 8) | data[2];
         y = data[4];
         
-        //psakhis - apply normalized values       
+        //psakhis - apply normalized to left analog      
         //input_report_abs(guncon2->input_device, ABS_X, x);
-        //input_report_abs(guncon2->input_device, ABS_Y, y);                          
+        //input_report_abs(guncon2->input_device, ABS_Y, y);  
+      
 
         /* Buttons */
         buttons = ((data[0] << 8) | data[1]) ^ 0xffff;
@@ -129,7 +131,8 @@ static void guncon2_usb_irq(struct urb *urb) {
 
         // main buttons
         input_report_key(guncon2->input_device, BTN_LEFT, buttons & GUNCON2_TRIGGER);
-        input_report_key(guncon2->input_device, BTN_RIGHT, buttons & GUNCON2_BTN_A || buttons & GUNCON2_BTN_C);
+        //input_report_key(guncon2->input_device, BTN_RIGHT, buttons & GUNCON2_BTN_A || buttons & GUNCON2_BTN_C);
+        input_report_key(guncon2->input_device, BTN_RIGHT, buttons & GUNCON2_BTN_A);
         input_report_key(guncon2->input_device, BTN_MIDDLE, buttons & GUNCON2_BTN_B);
         input_report_key(guncon2->input_device, BTN_A, buttons & GUNCON2_BTN_A);
         input_report_key(guncon2->input_device, BTN_B, buttons & GUNCON2_BTN_B);
@@ -140,7 +143,7 @@ static void guncon2_usb_irq(struct urb *urb) {
         x_min = input_abs_get_min(guncon2->input_device, ABS_RX);	
         x_max = input_abs_get_max(guncon2->input_device, ABS_RX); 	
         y_min = input_abs_get_min(guncon2->input_device, ABS_RY);	
-        y_max = input_abs_get_max(guncon2->input_device, ABS_RY);  
+        y_max = input_abs_get_max(guncon2->input_device, ABS_RY);         
         //micro calibration       
         if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_LEFT)) {
             x_min--;	                       
@@ -151,7 +154,7 @@ static void guncon2_usb_irq(struct urb *urb) {
             guncon2->is_recalibrate = true;
         }
         if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_UP)) {          
-            x_max--; 	            
+            x_max++; 	            
             guncon2->is_recalibrate = true;
         }	
         if ((!guncon2->is_recalibrate) && (buttons & GUNCON2_BTN_C) && (buttons & GUNCON2_DPAD_DOWN)) {            
@@ -171,17 +174,17 @@ static void guncon2_usb_irq(struct urb *urb) {
         if (x < x_min || x > x_max || rx == 0) {
             input_report_abs(guncon2->input_device, ABS_X, OFFSCREEN);
         } else {
-            nx = (x - x_min) << 16;
-            do_div(nx, rx);      
-            input_report_abs(guncon2->input_device, ABS_X, nx);
+            nx = (x - x_min) << 16;            
+            do_div(nx, rx);              
+            input_report_abs(guncon2->input_device, ABS_X, nx - CENTER);
         } 
          ry = y_max - y_min;
-         if (y < y_min || y > y_max || ry == 0) {
+        if (y < y_min || y > y_max || ry == 0) {
             input_report_abs(guncon2->input_device, ABS_Y, OFFSCREEN);
         } else {
             ny = (y - y_min) << 16;
-            do_div(ny, ry);      
-            input_report_abs(guncon2->input_device, ABS_Y, ny);
+            do_div(ny, ry);                
+            input_report_abs(guncon2->input_device, ABS_Y, ny - CENTER);            
         } 
         // end psakhis
 
@@ -320,8 +323,10 @@ static int guncon2_probe(struct usb_interface *intf,
     input_set_capability(guncon2->input_device, EV_KEY, BTN_MIDDLE);
     input_set_capability(guncon2->input_device, EV_ABS, ABS_X);
     input_set_capability(guncon2->input_device, EV_ABS, ABS_Y);
+    input_set_capability(guncon2->input_device, EV_ABS, ABS_RX);
+    input_set_capability(guncon2->input_device, EV_ABS, ABS_RY);
 
-    input_set_abs_params(guncon2->input_device, ABS_X, XN_MIN, XN_MAX, 0, 0);
+    input_set_abs_params(guncon2->input_device, ABS_X, XN_MIN, XN_MAX, 0, 0);    
     input_set_abs_params(guncon2->input_device, ABS_Y, YN_MIN, YN_MAX, 0, 0);
     
     //psakhis - store values on right analog    
