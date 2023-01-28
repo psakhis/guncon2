@@ -28,7 +28,9 @@ Install
     d) You can set as a mouse with -m=(width,height). You need set screen resolution
     
     e) Pressing C-Button and D-PAD directions you can recalibrate X-Axis on run-time (very useful inside games)
-    
+      - Example 1: Your gun is shooting outside on left  --> C-Button + D-PAD Left to decrase x-min absis 
+      - Example 2: Your gun is shooting outside on right --> C-Button + D-PAD Up to increase x-max absis 
+      
     f) Q key to exit daemon
       
  
