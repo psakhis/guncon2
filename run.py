@@ -268,12 +268,12 @@ class Guncon2(object):
                self.padX = 0   
          
         if self.C and self.padX == 1:           
-            self.X_MIN = self.X_MIN - 0x01
-        if self.C and self.padX == -1:           
-            self.X_MIN = self.X_MIN + 0x01   
-        if self.C and self.padY == 1:           
+            self.X_MIN = self.X_MIN + 0x01            
+        if self.C and self.padX == -1:                       
+            self.X_MIN = self.X_MIN - 0x01   
+        if self.C and self.padY == 1:                       
             self.X_MAX = self.X_MAX - 0x01
-        if self.C and self.padY == -1:                    
+        if self.C and self.padY == -1:                                
             self.X_MAX = self.X_MAX + 0x01
          
     def updateMouse(self):       
