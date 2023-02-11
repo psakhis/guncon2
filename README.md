@@ -25,13 +25,17 @@ Install
     
     c) You can see mapped GunCon2 to vjoy device 
     
-    d) You can set as a mouse with -m=(width,height). You need set screen resolution
+    d) You can set as a mouse with -m=1
     
-    e) Pressing C-Button and D-PAD directions you can recalibrate X-Axis on run-time (very useful inside games)
+    e) You can enable internal flasher with -f=n, where n are number of frames
+    
+    f) If flasher is enabled, brightness setting can be customized with -b=[0-300]
+    
+    g) Pressing C-Button and D-PAD directions you can recalibrate X-Axis on run-time (very useful inside games)
       - Example 1: Your gun is shooting outside on left  --> C-Button + D-PAD Left to decrase x-min absis 
       - Example 2: Your gun is shooting outside on right --> C-Button + D-PAD Up to increase x-max absis 
       
-    f) Q key to exit daemon
+    i) Q key to exit daemon
       
  
  
