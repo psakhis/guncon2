@@ -38,5 +38,6 @@ Install
     i) Q key to exit daemon
       
  
- 
+ TO DO:
+   - Input delay
  
