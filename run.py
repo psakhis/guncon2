@@ -8,6 +8,10 @@ import pyvjoy
 import pydirectinput
 import logging
 import usb1
+import math
+
+import wx
+import ctypes
 
 #PyUSB (import for use that)
 """
@@ -138,6 +142,41 @@ def wait_key(key=None, *, pre_flush=False, post_flush=True) -> str:
 
         return key
         
+#############################################################################################################
+#Brightness control
+#############################################################################################################
+GetSystemMetrics = ctypes.windll.user32.GetSystemMetrics  
+GetDC = ctypes.windll.user32.GetDC
+ReleaseDC = ctypes.windll.user32.ReleaseDC
+SetDeviceGammaRamp = ctypes.windll.gdi32.SetDeviceGammaRamp
+GetDeviceGammaRamp = ctypes.windll.gdi32.GetDeviceGammaRamp
+
+def setBrightness(lpRamp, gamma):
+    for i in range(256):        
+        #iValue = math.floor(min(65535, max(0, math.pow((i + 1)/256.0, (10 - gamma + 2.3)*0.1)*65535 + 0.5)))                              
+        iValue = i * (gamma + 128)                
+        #iValue = math.floor(min(65535, max(0, math.pow((i + 1)/256.0, (0 + 2.3)*0.1)*65535 + 0.5)))                              
+        if iValue > 65535: iValue = 65535                             
+        lpRamp[0][i] = lpRamp[1][i] = lpRamp[2][i] = iValue               
+    return lpRamp
+    
+def bakBrightness(lpRamp, lpRamp2):
+    for i in range(256):                                          
+        lpRamp2[0][i] = lpRamp[0][i]
+        lpRamp2[1][i] = lpRamp[1][i]
+        lpRamp2[2][i] = lpRamp[2][i]              
+    return lpRamp2
+
+hdc = ctypes.wintypes.HDC(GetDC(None))    
+GammaArray = ((ctypes.wintypes.WORD * 256) * 3)()
+GammaArrayBak = ((ctypes.wintypes.WORD * 256) * 3)()
+bBrightness = False
+fBrightness = 0
+if hdc:        
+        GetDeviceGammaRamp(hdc, ctypes.byref(GammaArray))
+        GammaArrayBak = bakBrightness(GammaArray, GammaArrayBak)      
+        bBrightness = True          
+                
 ############################################################################################
 
 def openDeviceHandle(context, vendor_id, product_id, device_index=1):
@@ -156,7 +195,7 @@ def openDeviceHandle(context, vendor_id, product_id, device_index=1):
     return None           
 
 class Guncon2(object):
-    def __init__(self, device, mX, MX, mY, MY, scale, width, height, index):
+    def __init__(self, device, mX, MX, mY, MY, scale, index, mouse_mode, frames_flash):
         self.device = device
         self.pos = Postion(0, 0)                
         self.X_MIN = mX
@@ -178,9 +217,9 @@ class Guncon2(object):
         self.j = pyvjoy.VJoyDevice(index)         
         pydirectinput.PAUSE = False
         pydirectinput.FAILSAFE = False
-        self.scale = scale   
-        self.width = width
-        self.height = height
+        self.scale = scale     
+        self.mouse = mouse_mode
+        self.flash = frames_flash     
         #PyUSB
         """
         self.device.set_configuration()
@@ -229,7 +268,9 @@ class Guncon2(object):
         return (pos - min_) / float(max_ - min_)
     
     
-    def mapData(self,data):             
+    def mapData(self,data):              
+        global fBrightness             
+          
         #Axis
         gunX = data[3]
         gunX <<= 8
@@ -249,6 +290,12 @@ class Guncon2(object):
         self.C = ((data[0] & 0x02) == 0)
         self.start = ((data[1] & 0x80) == 0)
         self.select = ((data[1] & 0x40) == 0)    
+        
+        #Brightness control (occurs every frame, 16ms)
+        if fBrightness >= 0:
+            fBrightness = fBrightness - 1                 
+        if self.prev_trigger == False and self.trigger == True:
+            fBrightness = self.flash   
         
         #HAT
         if ((data[0] & 0x10) == 0):
@@ -279,9 +326,9 @@ class Guncon2(object):
     def updateMouse(self):       
         if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
             pydirectinput.moveTo(-65536,-65536)            
-        else:                     
-            x = int(float(self.width * self.pos_normalised[0]))
-            y = int(float(self.height * self.pos_normalised[1]))          
+        else:                                       
+            x = int(float(GetSystemMetrics(0) * self.pos_normalised[0]))
+            y = int(float(GetSystemMetrics(1) * self.pos_normalised[1]))          
             pydirectinput.moveTo(x,y)
             
         if self.trigger and self.prev_trigger == False:     
@@ -300,7 +347,7 @@ class Guncon2(object):
            pydirectinput.mouseUp(button="right")         
                
     def updateVjoy(self):
-        #global start_time        
+        #global start_time                               
         if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
             self.j.data.wAxisX = 0
             self.j.data.wAxisY = 0            
@@ -319,7 +366,7 @@ class Guncon2(object):
           
         self.j.data.lButtons = 0 
         if self.trigger:
-          self.j.data.lButtons = self.j.data.lButtons + 1
+          self.j.data.lButtons = self.j.data.lButtons + 1                                 
         if self.start:
           self.j.data.lButtons = self.j.data.lButtons + 2
         if self.select:
@@ -329,8 +376,8 @@ class Guncon2(object):
         if self.B:  
           self.j.data.lButtons = self.j.data.lButtons + 16
         if self.C:  
-          self.j.data.lButtons = self.j.data.lButtons + 32    
-          
+          self.j.data.lButtons = self.j.data.lButtons + 32                    
+                  
         if self.padX == 0 and self.padY == 0: 
           self.j.data.bHats = -1
         else:                            
@@ -363,7 +410,7 @@ class Guncon2(object):
            return
         data = transfer.getBuffer()[:transfer.getActualLength()]
         self.mapData(data)
-        if self.width > 0 and self.height > 0:
+        if self.mouse == 1:
            self.updateMouse()
         self.updateVjoy()       
         transfer.submit()           
@@ -410,14 +457,20 @@ class Guncon2(object):
     """
 
 def libusb_guncon(args):
-    #LIBUSB1 async method      
+    #LIBUSB1 async method     
+    global hdc
+    global fBrightness   
+    global GammaArray  
+    global GammaArrayBak  
+                           
+    setBrightness(GammaArray, args.b)                                 
     with usb1.USBContext() as context:      
         handle = openDeviceHandle(context, 0x0b9a, 0x016a, args.index)      
         if handle is None: 
             sys.stderr.write("Failed to find any attached GunCon2 device")
             sys.exit(0)             
         handle.claimInterface(0)          
-        guncon = Guncon2(None, args.x[0], args.x[1], args.y[0], args.y[1], args.scale, args.m[0], args.m[1], args.index)                       
+        guncon = Guncon2(None, args.x[0], args.x[1], args.y[0], args.y[1], args.scale, args.index, args.m, args.f)                       
         handle.controlWrite(request_type=0x21, request=0x09, value=0x200, index=0, data=guncon.getCommand(0,0), timeout=100000)                                    
         log.info("Device attached")
         log.info("Press Q key to exit")              
@@ -427,7 +480,11 @@ def libusb_guncon(args):
         #start_time = time.time()            
         running = True       
         try:              
-            while transfer.isSubmitted() and running:
+            while transfer.isSubmitted() and running:                
+                if fBrightness > 0 and fBrightness == args.f:                 
+                  SetDeviceGammaRamp(hdc, ctypes.byref(GammaArray))                                                       
+                if fBrightness == 0:                 
+                  SetDeviceGammaRamp(hdc, ctypes.byref(GammaArrayBak))
                 try:
                   if key_pressed("q") or key_pressed("Q"):
                     running = False
@@ -435,10 +492,14 @@ def libusb_guncon(args):
                 except usb1.USBErrorInterrupted:                 
                   pass
         finally:
-            handle.releaseInterface(0)  
+            handle.releaseInterface(0)             
         return running
                            
 def main():
+    global bBrightness
+    global hdc
+    global GammaArray
+    global GammaArrayBak   
     def point_type(value):
         m = re.match(r"\(?(\d+)\s*,\s*(\d+)\)?", value)
         if m:
@@ -451,19 +512,35 @@ def main():
     parser.add_argument("-x", default=(175, 720), type=point_type)
     parser.add_argument("-y", default=(20, 240), type=point_type)  
     parser.add_argument("-scale", default=32768, type=int)  
-    parser.add_argument("-m", default=(0, 0), type=point_type)      
+    parser.add_argument("-m", default=0, type=int)      
+    parser.add_argument("-b", default=255, type=int)            
+    parser.add_argument("-f", default=0, type=int)            
     args = parser.parse_args()
-
+    
     logging.basicConfig(level=logging.INFO)   
     log.info("Using device index={}".format(args.index))
     log.info("Using calibration x=({},{}) y=({},{})".format(args.x[0],args.x[1],args.y[0],args.y[1]))
     log.info("Using analog scale={}".format(args.scale))              
-    if args.m[0] > 0 and args.m[1] > 0:
-        log.info("Using mouse resolution m=({},{})".format(args.m[0],args.m[1]))              
         
+    if args.m == 1:        
+        log.info("Mouse mode enabled")      
+    else:        
+        log.info("Mouse mode disabled")            
+    log.info("Flasher (frames) f={} with (brightness) b={}".format(args.f, args.b))                        
+    
+    if (bBrightness == False):
+        log.info("Warning: brightness can not be controlled")    
+        args.f = 0                   
+    
+    if (args.f == 0):
+        bBrightness = False              
+    
     main_thread = True
     while (main_thread):      
         main_thread=libusb_guncon(args)
+    
+    if (bBrightness == True):       
+        SetDeviceGammaRamp(hdc, ctypes.byref(GammaArrayBak))
     
     #old PyUSB (only sync)
     """    
@@ -482,7 +559,7 @@ def main():
        return 1   
        
     try:
-        guncon = Guncon2(guncon2_dev,args.x[0],args.x[1],args.y[0],args.y[1])  
+        guncon = Guncon2(guncon2_dev,args.x[0],args.x[1],args.y[0],args.y[1],args.l,args.b)  
         log.info("GunCon2 device attached")          
         running = True     
         prev_trigger = False 
