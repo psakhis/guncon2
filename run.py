@@ -10,14 +10,7 @@ import logging
 import usb1
 import math
 
-import wx
 import ctypes
-
-#PyUSB (import for use that)
-"""
-import usb.core
-import usb.util
-"""
 
 log = logging.getLogger("guncon2-daemon")
 
@@ -152,11 +145,21 @@ SetDeviceGammaRamp = ctypes.windll.gdi32.SetDeviceGammaRamp
 GetDeviceGammaRamp = ctypes.windll.gdi32.GetDeviceGammaRamp
 
 def setBrightness(lpRamp, gamma):
-    for i in range(256):        
-        #iValue = math.floor(min(65535, max(0, math.pow((i + 1)/256.0, (10 - gamma + 2.3)*0.1)*65535 + 0.5)))                              
-        iValue = i * (gamma + 128)                
-        #iValue = math.floor(min(65535, max(0, math.pow((i + 1)/256.0, (0 + 2.3)*0.1)*65535 + 0.5)))                              
-        if iValue > 65535: iValue = 65535                             
+    for i in range(256):                                                            
+        #if i < 50:
+        # iValue = math.floor(33000 * (gamma / 300))
+        #elif i < 100:
+        # iValue = math.floor(45000 * (gamma / 300))
+        #elif i < 150:
+        # iValue = math.floor(58000 * (gamma / 300))      
+        #else:
+        # iValue = math.floor(min(65535, max(0, math.pow((i + 1)/256.0, ((300 / gamma) + 1.3)*0.1)*65535 + 0.5))) 
+        #Phasermaniac formula
+        if i < gamma:
+         iValue = gamma * 256
+        else:
+         iValue = i * 256
+        if iValue > 65535: iValue = 65535     
         lpRamp[0][i] = lpRamp[1][i] = lpRamp[2][i] = iValue               
     return lpRamp
     
@@ -195,21 +198,21 @@ def openDeviceHandle(context, vendor_id, product_id, device_index=1):
     return None           
 
 class Guncon2(object):
-    def __init__(self, device, mX, MX, mY, MY, scale, index, mouse_mode, frames_flash):
+    def __init__(self, device, mX, MX, mY, MY, scale, index, mouse_mode, frames_flash, input_delay, offscreen):
         self.device = device
         self.pos = Postion(0, 0)                
         self.X_MIN = mX
         self.X_MAX = MX
         self.Y_MIN = mY
-        self.Y_MAX = MY
-        #self.center = Postion(self.max_x/2, self.max_y/2)
+        self.Y_MAX = MY        
         self.trigger = False
-        self.prev_trigger = False      
+        self.prev_trigger = False       
+        self.trigger_delay = 0  
+        self.trigger_pending = 0   
         self.start = False
         self.prev_start = False
         self.select = False        
-        self.A = False
-        self.prev_A = False
+        self.A = False                
         self.B = False
         self.C = False
         self.padX = 0
@@ -219,24 +222,13 @@ class Guncon2(object):
         pydirectinput.FAILSAFE = False
         self.scale = scale     
         self.mouse = mouse_mode
+        self.mouse_prev_trigger = False
+        self.mouse_prev_start = False
+        self.mouse_prev_A = False
         self.flash = frames_flash     
-        #PyUSB
-        """
-        self.device.set_configuration()
-        self.cfg = self.device[0] 
-        self.intf = self.cfg[(0,0)] 
-        self.ep = self.intf[0] 
-        self.connect(x=0,y=0)        
-        self.ltag = 0.0
-        """
-        
-        
-    """    
-    def __del__(self):    
-    
-        if self.device is not None:
-            usb.util.dispose_resources(self.device)   #PyUSB
-    """        
+        self.delay = input_delay
+        self.offscr = offscreen
+        self.do_offscr = False                        
     
     @property
     def absinfo(self):       
@@ -280,12 +272,10 @@ class Guncon2(object):
         gunY |= data[4]        
         self.pos = Postion(gunX, gunY) 
         
-        self.prev_trigger = self.trigger
-        self.prev_start = self.start
-        self.prev_A = self.A
+        self.prev_trigger = self.trigger 
         #Buttons
         self.trigger = ((data[1] & 0x20) == 0)            
-        self.A = ((data[0] & 0x08) == 0)
+        self.A = ((data[0] & 0x08) == 0)    
         self.B = ((data[0] & 0x04) == 0)         
         self.C = ((data[0] & 0x02) == 0)
         self.start = ((data[1] & 0x80) == 0)
@@ -297,6 +287,31 @@ class Guncon2(object):
         if self.prev_trigger == False and self.trigger == True:
             fBrightness = self.flash   
         
+        #Trigger input delay (only when no flash)
+        if self.prev_trigger == False and self.trigger == True and fBrightness > 0:
+            self.trigger_delay = max(self.delay, self.trigger_delay)                   
+        
+        if self.trigger_delay > 0:
+            if self.trigger == True:                                   
+                 self.trigger_pending = self.trigger_pending + 1
+        else: 
+            if self.trigger_pending > 0 and self.trigger == False:
+                 self.trigger = True
+                 self.trigger_pending = self.trigger_pending - 1                                           
+        
+        #Offscreen button mapping
+        self.do_offscr = False
+        if self.trigger_delay <= 0 and self.trigger == True and (self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1):                                 
+           if self.offscr == 1:
+              self.do_offscr = True   
+              self.A = True
+           if self.offscr == 2:
+              self.do_offscr = True
+              self.B = True
+           if self.offscr == 3:
+              self.do_offscr = True
+              self.C = True
+              
         #HAT
         if ((data[0] & 0x10) == 0):
             self.padY = -1
@@ -323,31 +338,43 @@ class Guncon2(object):
         if self.C and self.padY == -1:                                
             self.X_MAX = self.X_MAX + 0x01
          
-    def updateMouse(self):       
+    def updateMouse(self):      
+        global fBrightness        
+        if self.flash > 0 and fBrightness <= 0:
+           return
+                   
         if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
             pydirectinput.moveTo(-65536,-65536)            
         else:                                       
             x = int(float(GetSystemMetrics(0) * self.pos_normalised[0]))
             y = int(float(GetSystemMetrics(1) * self.pos_normalised[1]))          
             pydirectinput.moveTo(x,y)
-            
-        if self.trigger and self.prev_trigger == False:     
+                
+        if self.trigger and self.mouse_prev_trigger == False and self.do_offscr == False:                
            pydirectinput.mouseDown()  
-        if self.trigger == False and self.prev_trigger:     
+        if self.trigger == False and self.mouse_prev_trigger and self.do_offscr == False:               
            pydirectinput.mouseUp()  
         
-        if self.start and self.prev_start == False:     
+        if self.start and self.mouse_prev_start == False:     
            pydirectinput.mouseDown(button="middle")  
-        if self.start == False and self.prev_start:     
+        if self.start == False and self.mouse_prev_start:     
            pydirectinput.mouseUp(button="middle")  
               
-        if self.A and self.prev_A == False:     
+        if self.A and self.mouse_prev_A == False:     
            pydirectinput.mouseDown(button="right")  
-        if self.A == False and self.prev_A:     
-           pydirectinput.mouseUp(button="right")         
+        if self.A == False and self.mouse_prev_A:     
+           pydirectinput.mouseUp(button="right")    
+        
+        self.mouse_prev_trigger = self.trigger  
+        self.mouse_prev_start = self.start
+        self.mouse_prev_A = self.A                                        
                
     def updateVjoy(self):
         #global start_time                               
+        global fBrightness 
+        if self.flash > 0 and fBrightness <= 0:
+           return
+                   
         if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
             self.j.data.wAxisX = 0
             self.j.data.wAxisY = 0            
@@ -365,7 +392,7 @@ class Guncon2(object):
         """      
           
         self.j.data.lButtons = 0 
-        if self.trigger:
+        if self.trigger and self.do_offscr == False:
           self.j.data.lButtons = self.j.data.lButtons + 1                                 
         if self.start:
           self.j.data.lButtons = self.j.data.lButtons + 2
@@ -405,14 +432,17 @@ class Guncon2(object):
         self.j.update()                               
      
     #libusb1
-    def updateAsync(self,transfer):        
+    def updateAsync(self,transfer):              
         if transfer.getStatus() != usb1.TRANSFER_COMPLETED:
            return
         data = transfer.getBuffer()[:transfer.getActualLength()]
         self.mapData(data)
-        if self.mouse == 1:
-           self.updateMouse()
-        self.updateVjoy()       
+        if self.trigger_delay > 0:
+           self.trigger_delay = self.trigger_delay - 1
+        else:   
+           self.updateVjoy()       
+           if self.mouse == 1:
+              self.updateMouse()           
         transfer.submit()           
      
     def getCommand(self, x=0, y=0):     
@@ -424,44 +454,14 @@ class Guncon2(object):
           sy = 255 #0xff            
         command = [abs(x), sx, abs(y), sy, 0, 1] #60hz mode interlaced
         return command                                                    
-        
-    #winusb - PyUSB
-    """
-    def connect(self, x=0, y=0):     
-        sx = 0
-        sy = 0   
-        if x < 0:
-          sx = 255 #0xff      
-        if y < 0:
-          sy = 255 #0xff            
-        command = [abs(x), sx, abs(y), sy, 0, 1] #60hz mode interlaced
-        assert self.device.ctrl_transfer(bmRequestType=0x21, bRequest=0x09,  wValue=0x200,  wIndex=0, data_or_wLength=command, timeout=100000) == len(command)                                
-    
-    #winusb - PyUSB
-    def update(self):        
-       #read 6 bytes        
-       if self.ltag <= 0:                   
-         self.ltag = 0.009
-       else:
-         self.ltag = self.ltag - 0.001
-         return True
-       try:                      
-         data = self.device.read(0x81, 6)  # self.ep.bEndpointAddress         
-         self.mapData(data)          
-         return True
-       except  KeyboardInterrupt:
-         raise KeyboardInterrupt      
-       except:        
-         self.connect(x=0, y=0)  
-         return self.update()           
-    """
+           
 
 def libusb_guncon(args):
     #LIBUSB1 async method     
     global hdc
     global fBrightness   
     global GammaArray  
-    global GammaArrayBak  
+    global GammaArrayBak      
                            
     setBrightness(GammaArray, args.b)                                 
     with usb1.USBContext() as context:      
@@ -470,21 +470,20 @@ def libusb_guncon(args):
             sys.stderr.write("Failed to find any attached GunCon2 device")
             sys.exit(0)             
         handle.claimInterface(0)          
-        guncon = Guncon2(None, args.x[0], args.x[1], args.y[0], args.y[1], args.scale, args.index, args.m, args.f)                       
+        guncon = Guncon2(None, args.x[0], args.x[1], args.y[0], args.y[1], args.scale, args.index, args.m, args.f, args.d, args.o)                       
         handle.controlWrite(request_type=0x21, request=0x09, value=0x200, index=0, data=guncon.getCommand(0,0), timeout=100000)                                    
         log.info("Device attached")
         log.info("Press Q key to exit")              
         transfer = handle.getTransfer()
         transfer.setBulk(0x81, 6, guncon.updateAsync)
-        transfer.submit()
-        #start_time = time.time()            
+        transfer.submit()                 
         running = True       
         try:              
             while transfer.isSubmitted() and running:                
                 if fBrightness > 0 and fBrightness == args.f:                 
-                  SetDeviceGammaRamp(hdc, ctypes.byref(GammaArray))                                                       
+                  SetDeviceGammaRamp(hdc, ctypes.byref(GammaArray))                                                                     
                 if fBrightness == 0:                 
-                  SetDeviceGammaRamp(hdc, ctypes.byref(GammaArrayBak))
+                  SetDeviceGammaRamp(hdc, ctypes.byref(GammaArrayBak))                
                 try:
                   if key_pressed("q") or key_pressed("Q"):
                     running = False
@@ -513,8 +512,10 @@ def main():
     parser.add_argument("-y", default=(20, 240), type=point_type)  
     parser.add_argument("-scale", default=32768, type=int)  
     parser.add_argument("-m", default=0, type=int)      
-    parser.add_argument("-b", default=255, type=int)            
+    parser.add_argument("-b", default=128, type=int)            
     parser.add_argument("-f", default=0, type=int)            
+    parser.add_argument("-d", default=1, type=int)            
+    parser.add_argument("-o", default=0, type=int)            
     args = parser.parse_args()
     
     logging.basicConfig(level=logging.INFO)   
@@ -523,17 +524,26 @@ def main():
     log.info("Using analog scale={}".format(args.scale))              
         
     if args.m == 1:        
-        log.info("Mouse mode enabled")      
+        log.info("Mouse mode enabled m={}".format(args.m))       
     else:        
-        log.info("Mouse mode disabled")            
-    log.info("Flasher (frames) f={} with (brightness) b={}".format(args.f, args.b))                        
-    
+        log.info("Mouse mode disabled m={}".format(args.m))            
+                             
     if (bBrightness == False):
         log.info("Warning: brightness can not be controlled")    
         args.f = 0                   
     
     if (args.f == 0):
         bBrightness = False              
+    
+    if args.f == 0:    
+        log.info("Flasher disabled f={}".format(args.f))
+    else:
+        log.info("Flasher enabled (frames) f={} with (brightness) b={} and input delay d={}".format(args.f, args.b, args.d))      
+    
+    if args.o == 0: 
+        log.info("Offscreen button disabled o={}".format(args.o))
+    else:
+        log.info("Offscreen button enabled o={}".format(args.o))    
     
     main_thread = True
     while (main_thread):      
@@ -542,99 +552,7 @@ def main():
     if (bBrightness == True):       
         SetDeviceGammaRamp(hdc, ctypes.byref(GammaArrayBak))
     
-    #old PyUSB (only sync)
-    """    
-    j = None
-    # find vjoy device
-    j = pyvjoy.VJoyDevice(1)    
-    if j is None:
-        sys.stderr.write("Failed to find any attached vJoy device")
-        return 1  
-        
-    guncon2_dev = None
-    # find the first guncon2
-    guncon2_dev = usb.core.find(idVendor=0x0b9a, idProduct=0x016a)       
-    if guncon2_dev is None:
-       sys.stderr.write("Failed to find any attached GunCon2 devices")
-       return 1   
-       
-    try:
-        guncon = Guncon2(guncon2_dev,args.x[0],args.x[1],args.y[0],args.y[1],args.l,args.b)  
-        log.info("GunCon2 device attached")          
-        running = True     
-        prev_trigger = False 
-        next_log = 0
-        sys.setswitchinterval(0.001)     
-        while running:         
-            start_time = time.time()                                 
-            running = guncon.update()                         
-            
-            if guncon.pos_normalised[0] < 0 or guncon.pos_normalised[1] < 0 or guncon.pos_normalised[0] > 1 or guncon.pos_normalised[1] > 1:
-                j.data.wAxisX = 0
-                j.data.wAxisY = 0
-            else:                
-                j.data.wAxisX = int(float(args.scale * guncon.pos_normalised[0]))
-                j.data.wAxisY = int(float(args.scale * guncon.pos_normalised[1]))
-            
-            if  args.log and guncon.trigger and not prev_trigger:
-                print("trigger detected")     
-              
-            if  args.log and not guncon.trigger and prev_trigger:
-                print("trigger down")     
-                next_log = 4
-                
-            if  args.log and guncon.ltag < 0.001 and (guncon.trigger or next_log > 0):  
-                print(time.time()) 
-                print("--- %s secondsRead ---" % (time.time() - start_time))              
-                print(guncon.ltag, guncon.pos_normalised[0], guncon.pos_normalised[1], j.data.wAxisX, j.data.wAxisY ) 
-                next_log = next_log - 1    
-            
-            prev_trigger = guncon.trigger
-              
-            j.data.lButtons = 0 
-            if guncon.trigger:
-              j.data.lButtons = j.data.lButtons + 1
-            if guncon.start:
-              j.data.lButtons = j.data.lButtons + 2
-            if guncon.select:
-              j.data.lButtons = j.data.lButtons + 4    
-            if guncon.A:  
-              j.data.lButtons = j.data.lButtons + 8
-            if guncon.B:  
-              j.data.lButtons = j.data.lButtons + 16
-            if guncon.C:  
-              j.data.lButtons = j.data.lButtons + 32    
-              
-            if guncon.padX == 0 and guncon.padY == 0: 
-              j.data.bHats = -1
-            else:                            
-              if guncon.padY == -1 and guncon.padX != -1:  
-                if  guncon.padX == 1:           
-                   j.data.bHats = 4500
-                else:
-                   j.data.bHats = 0
-              elif guncon.padX == 1:
-                if  guncon.padY == 1:
-                   j.data.bHats = 13500    
-                else:
-                   j.data.bHats = 9000
-              elif guncon.padY == 1:
-                if  guncon.padX == -1:
-                   j.data.bHats = 22500    
-                else:
-                   j.data.bHats = 18000      
-              elif guncon.padX == -1:
-                if  guncon.padY == -1:
-                   j.data.bHats = 31500    
-                else:
-                   j.data.bHats = 27000                                      
-              j.update()                                    
-    except KeyboardInterrupt:
-        running = False
-        print("Program terminated manually!")            
-        raise SystemExit                                   
-    """
-    
+   
 if __name__ == "__main__":
     sys.exit(main() or 0)
 
