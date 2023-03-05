@@ -43,5 +43,6 @@ Install
       
  
  CONTRIBUTIONS
+   - Thanks to @sonik-br for their winusb driver and initial code
    - Thanks to @phasermaniac with testing and icon resources. http://forum.arcadecontrols.com/index.php/topic,166121.0.html
  
