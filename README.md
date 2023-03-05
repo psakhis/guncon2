@@ -27,17 +27,21 @@ Install
     
     d) You can set as a mouse with -m=1
     
-    e) You can enable internal flasher with -f=n, where n are number of frames
+    e) You can enable internal flasher with -f=n, where n are number of frames. If enabled daemon sends to vjoy/mouse only when flashing
     
-    f) If flasher is enabled, brightness setting can be customized with -b=[0-300]
+    f) If flasher is enabled, brightness setting can be customized with -b=[1-128]
     
     g) Pressing C-Button and D-PAD directions you can recalibrate X-Axis on run-time (very useful inside games)
       - Example 1: Your gun is shooting outside on left  --> C-Button + D-PAD Left to decrase x-min absis 
       - Example 2: Your gun is shooting outside on right --> C-Button + D-PAD Up to increase x-max absis 
-      
-    i) Q key to exit daemon
+    
+    h) Offscreen option. -o=1,2,3 for A,B or C. Switch trigger with this button when shooting out of screen.
+    
+    i) Delay option. -d=n, where n are number of frames to delay input. Use it in combination with internal flasher. 
+    
+    j) Q key to exit daemon
       
  
- TO DO:
-   - Input delay
+ TO DO
+   - Tray icon
  
