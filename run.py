@@ -339,61 +339,67 @@ class Guncon2(object):
             self.X_MAX = self.X_MAX + 0x01
          
     def updateMouse(self):      
-        global fBrightness        
+        global fBrightness   
+        report_all = True     
         if self.flash > 0 and fBrightness <= 0:
-           return
-                   
-        if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
-            pydirectinput.moveTo(-65536,-65536)            
-        else:                                       
-            x = int(float(GetSystemMetrics(0) * self.pos_normalised[0]))
-            y = int(float(GetSystemMetrics(1) * self.pos_normalised[1]))          
-            pydirectinput.moveTo(x,y)
-                
-        if self.trigger and self.mouse_prev_trigger == False and self.do_offscr == False:                
-           pydirectinput.mouseDown()  
-        if self.trigger == False and self.mouse_prev_trigger and self.do_offscr == False:               
-           pydirectinput.mouseUp()  
+           report_all = False
         
+        if report_all:            
+           if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
+               pydirectinput.moveTo(-65536,-65536)            
+           else:                                       
+               x = int(float(GetSystemMetrics(0) * self.pos_normalised[0]))
+               y = int(float(GetSystemMetrics(1) * self.pos_normalised[1]))          
+               pydirectinput.moveTo(x,y)
+                
+           if self.trigger and self.mouse_prev_trigger == False and self.do_offscr == False:                
+               pydirectinput.mouseDown()  
+           if self.trigger == False and self.mouse_prev_trigger and self.do_offscr == False:               
+               pydirectinput.mouseUp()  
+           self.mouse_prev_trigger = self.trigger
+            
         if self.start and self.mouse_prev_start == False:     
-           pydirectinput.mouseDown(button="middle")  
+            pydirectinput.mouseDown(button="middle")  
         if self.start == False and self.mouse_prev_start:     
-           pydirectinput.mouseUp(button="middle")  
+            pydirectinput.mouseUp(button="middle")  
               
         if self.A and self.mouse_prev_A == False:     
-           pydirectinput.mouseDown(button="right")  
+            pydirectinput.mouseDown(button="right")  
         if self.A == False and self.mouse_prev_A:     
-           pydirectinput.mouseUp(button="right")    
-        
-        self.mouse_prev_trigger = self.trigger  
+            pydirectinput.mouseUp(button="right")    
+                  
         self.mouse_prev_start = self.start
         self.mouse_prev_A = self.A                                        
                
     def updateVjoy(self):
         #global start_time                               
         global fBrightness 
+        report_all = True
         if self.flash > 0 and fBrightness <= 0:
-           return
-                   
-        if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
-            self.j.data.wAxisX = 0
-            self.j.data.wAxisY = 0            
-        else:                                  
-            self.j.data.wAxisX = int(float(self.scale * self.pos_normalised[0]))
-            self.j.data.wAxisY = int(float(self.scale * self.pos_normalised[1]))
-        """
-        if  self.trigger:
-            print("trigger detected")                 
-            
-        if  self.trigger:  
-            print(time.time()) 
-            print("--- %s secondsRead ---" % (time.time() - start_time))              
-            print(self.pos_normalised[0], self.pos_normalised[1], self.j.data.wAxisX, self.j.data.wAxisY )             
-        """      
+           report_all = False
+        
+        if report_all:           
+           if self.pos_normalised[0] < 0 or self.pos_normalised[1] < 0 or self.pos_normalised[0] > 1 or self.pos_normalised[1] > 1:
+               self.j.data.wAxisX = 0
+               self.j.data.wAxisY = 0            
+           else:                                  
+               self.j.data.wAxisX = int(float(self.scale * self.pos_normalised[0]))
+               self.j.data.wAxisY = int(float(self.scale * self.pos_normalised[1]))
+           """
+           if self.trigger:
+               print("trigger detected")                 
+               
+           if  self.trigger:  
+               print(time.time()) 
+               print("--- %s secondsRead ---" % (time.time() - start_time))              
+               print(self.pos_normalised[0], self.pos_normalised[1], self.j.data.wAxisX, self.j.data.wAxisY )             
+           """      
           
         self.j.data.lButtons = 0 
-        if self.trigger and self.do_offscr == False:
-          self.j.data.lButtons = self.j.data.lButtons + 1                                 
+        if report_all:
+           if self.trigger and self.do_offscr == False:
+               self.j.data.lButtons = self.j.data.lButtons + 1
+               
         if self.start:
           self.j.data.lButtons = self.j.data.lButtons + 2
         if self.select:
