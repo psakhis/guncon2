@@ -337,8 +337,8 @@ def main():
                 if button in (ecodes.BTN_RIGHT, ecodes.BTN_MIDDLE) and value == 1:
                     running = False
             """
-            raw_pos_txt = font.render(f"({raw_x}, {raw_y})", True, (128, 128, 255))
-            cal_pos_txt = font.render(f"({cx}, {cy})", True, (128, 128, 255))
+            raw_pos_txt = font.render(f"({raw_x}, {raw_y})", True, (255, 103, 0))
+            cal_pos_txt = font.render(f"({cx}, {cy})", True, (255, 103, 0))
 
             screen.blit(raw_pos_txt, (20, height - 40))
             blit_right(screen, cal_pos_txt, (width - 20, height - 40))
@@ -377,10 +377,10 @@ def main():
                 onscreen_warning = 0
 
             if time.time() < onscreen_warning:
-                off_screen_txt = font.render("Warning: Shot Off-Screen", True, (255, 80, 80))
+                off_screen_txt = font.render("Warning: Shot Off-Screen", True, (255, 103, 0))
                 blit_center(screen, off_screen_txt, (width // 2, 60))
 
-            fps = font.render(str(round(clock.get_fps())), True, (128, 128, 255))
+            fps = font.render(str(round(clock.get_fps())), True, (255, 103, 0))
             screen.blit(fps, (20, 20))
 
             pygame.display.flip()

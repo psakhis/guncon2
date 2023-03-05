@@ -8,7 +8,11 @@ import pyvjoy
 import pydirectinput
 import logging
 import usb1
-import math
+#import math
+import threading
+from pystray import Menu, MenuItem 
+import pystray
+from PIL import Image
 
 import ctypes
 
@@ -17,7 +21,22 @@ log = logging.getLogger("guncon2-daemon")
 Postion = namedtuple("Postion", ["x","y"])
 
 #start_time = time.time() 
-
+icon = None
+calibrationText = "Calibration"
+scaleText = "Scale"
+mouseText =  "Mouse"
+flasherText = "Flasher"
+offscreenText = "Offscreen"
+running = False
+#action icon Quit
+def action():  
+    global running    
+    global icon
+    if running == False:
+       icon.stop()
+    else:   
+       running = False
+    
 #https://stackoverflow.com/questions/24072790/how-to-detect-key-presses
 ########################################################################################
 try:
@@ -216,7 +235,9 @@ class Guncon2(object):
         self.B = False
         self.C = False
         self.padX = 0
+        self.prev_padX = 0
         self.padY = 0
+        self.prev_padY = 0
         self.j = pyvjoy.VJoyDevice(index)         
         pydirectinput.PAUSE = False
         pydirectinput.FAILSAFE = False
@@ -262,7 +283,8 @@ class Guncon2(object):
     
     def mapData(self,data):              
         global fBrightness             
-          
+        global calibrationText  
+        global icon
         #Axis
         gunX = data[3]
         gunX <<= 8
@@ -313,6 +335,7 @@ class Guncon2(object):
               self.C = True
               
         #HAT
+        self.prev_padY = self.padY
         if ((data[0] & 0x10) == 0):
             self.padY = -1
         else:
@@ -321,6 +344,7 @@ class Guncon2(object):
             else:
                self.padY = 0
 
+        self.prev_padX = self.padX
         if ((data[0] & 0x80) == 0):
            self.padX = -1
         else:
@@ -329,15 +353,27 @@ class Guncon2(object):
            else:
                self.padX = 0   
          
-        if self.C and self.padX == 1:           
-            self.X_MIN = self.X_MIN + 0x01            
-        if self.C and self.padX == -1:                       
+        if self.C and self.padX == 1 and self.prev_padX == 0:           
+            self.X_MIN = self.X_MIN + 0x01     
+            calibrationText = "Using calibration x=({},{}) y=({},{})".format(self.X_MIN,self.X_MAX,self.Y_MIN,self.Y_MAX)
+            log.info(calibrationText)  
+            icon.notify(calibrationText,title="Calibration updated: X_MIN++")                             
+        if self.C and self.padX == -1 and self.prev_padX == 0:                       
             self.X_MIN = self.X_MIN - 0x01   
-        if self.C and self.padY == 1:                       
+            calibrationText = "Using calibration x=({},{}) y=({},{})".format(self.X_MIN,self.X_MAX,self.Y_MIN,self.Y_MAX)
+            log.info(calibrationText) 
+            icon.notify(calibrationText,title="Calibration updated: X_MIN--")                              
+        if self.C and self.padY == 1 and self.prev_padY == 0:                       
             self.X_MAX = self.X_MAX - 0x01
-        if self.C and self.padY == -1:                                
+            calibrationText = "Using calibration x=({},{}) y=({},{})".format(self.X_MIN,self.X_MAX,self.Y_MIN,self.Y_MAX)
+            log.info(calibrationText)  
+            icon.notify(calibrationText,title="Calibration updated: X_MAX--")                              
+        if self.C and self.padY == -1 and self.prev_padY == 0:                                
             self.X_MAX = self.X_MAX + 0x01
-         
+            calibrationText = "Using calibration x=({},{}) y=({},{})".format(self.X_MIN,self.X_MAX,self.Y_MIN,self.Y_MAX)
+            log.info(calibrationText)  
+            icon.notify(calibrationText,title="Calibration updated: X_MAX++")                              
+            
     def updateMouse(self):      
         global fBrightness   
         report_all = True     
@@ -464,17 +500,19 @@ class Guncon2(object):
 
 def libusb_guncon(args):
     #LIBUSB1 async method     
-    global hdc
     global fBrightness   
-    global GammaArray  
-    global GammaArrayBak      
-                           
+    global hdc    
+    global GammaArray, GammaArrayBak      
+    global icon
+    global running
     setBrightness(GammaArray, args.b)                                 
     with usb1.USBContext() as context:      
         handle = openDeviceHandle(context, 0x0b9a, 0x016a, args.index)      
-        if handle is None: 
-            sys.stderr.write("Failed to find any attached GunCon2 device")
-            sys.exit(0)             
+        if handle is None:            
+            log.error("Failed to find any attached GunCon2 device")
+            if icon is not None:
+                icon.stop()    
+            sys.exit(0)                     
         handle.claimInterface(0)          
         guncon = Guncon2(None, args.x[0], args.x[1], args.y[0], args.y[1], args.scale, args.index, args.m, args.f, args.d, args.o)                       
         handle.controlWrite(request_type=0x21, request=0x09, value=0x200, index=0, data=guncon.getCommand(0,0), timeout=100000)                                    
@@ -503,8 +541,9 @@ def libusb_guncon(args):
 def main():
     global bBrightness
     global hdc
-    global GammaArray
-    global GammaArrayBak   
+    global GammaArray, GammaArrayBak    
+    global calibrationText, scaleText, mouseText, flasherText, offscreenText   
+    
     def point_type(value):
         m = re.match(r"\(?(\d+)\s*,\s*(\d+)\)?", value)
         if m:
@@ -513,6 +552,7 @@ def main():
             raise ValueError("{} is an invalid point".format(value))
 
     parser = argparse.ArgumentParser()      
+    parser.add_argument("-tray", default=0, type=int)      
     parser.add_argument("-index", default=1, type=int)      
     parser.add_argument("-x", default=(175, 720), type=point_type)
     parser.add_argument("-y", default=(20, 240), type=point_type)  
@@ -526,30 +566,36 @@ def main():
     
     logging.basicConfig(level=logging.INFO)   
     log.info("Using device index={}".format(args.index))
-    log.info("Using calibration x=({},{}) y=({},{})".format(args.x[0],args.x[1],args.y[0],args.y[1]))
-    log.info("Using analog scale={}".format(args.scale))              
+    calibrationText = "Using calibration x=({},{}) y=({},{})".format(args.x[0],args.x[1],args.y[0],args.y[1])
+    log.info(calibrationText)            
         
+    scaleText = "Using analog scale={}".format(args.scale)
+    log.info(scaleText)              
+                        
     if args.m == 1:        
-        log.info("Mouse mode enabled m={}".format(args.m))       
+        mouseText = "Mouse mode enabled m={}".format(args.m)             
     else:        
-        log.info("Mouse mode disabled m={}".format(args.m))            
+        mouseText = "Mouse mode disabled m={}".format(args.m)     
+    log.info(mouseText)              
                              
     if (bBrightness == False):
-        log.info("Warning: brightness can not be controlled")    
+        log.warning("Brightness can not be controlled")    
         args.f = 0                   
     
     if (args.f == 0):
         bBrightness = False              
     
     if args.f == 0:    
-        log.info("Flasher disabled f={}".format(args.f))
+        flasherText = "Flasher disabled f={}".format(args.f)
     else:
-        log.info("Flasher enabled (frames) f={} with (brightness) b={} and input delay d={}".format(args.f, args.b, args.d))      
-    
+        flasherText = "Flasher enabled (frames) f={} with (brightness) b={} and input delay d={}".format(args.f, args.b, args.d)    
+    log.info(flasherText)
+        
     if args.o == 0: 
-        log.info("Offscreen button disabled o={}".format(args.o))
+        offscreenText = "Offscreen button disabled o={}".format(args.o)        
     else:
-        log.info("Offscreen button enabled o={}".format(args.o))    
+        offscreenText = "Offscreen button enabled o={}".format(args.o)
+    log.info(offscreenText)    
     
     main_thread = True
     while (main_thread):      
@@ -558,7 +604,23 @@ def main():
     if (bBrightness == True):       
         SetDeviceGammaRamp(hdc, ctypes.byref(GammaArrayBak))
     
-   
-if __name__ == "__main__":
+    if icon is not None:
+       icon.stop()
+    
+if __name__ == "__main__":    
+    parser = argparse.ArgumentParser()      
+    parser.add_argument("-tray", default=0, type=int)   
+    parser.add_argument("-index", default=1, type=int)   
+    args = parser.parse_args()      
+    if args.tray == 1:  
+        image = Image.open("gun{}.png".format(args.index))        
+        icon = pystray.Icon("name", image, "GunCon 2", menu=Menu(        
+            MenuItem(lambda text: calibrationText, action, enabled=False),
+            MenuItem(lambda text: scaleText, action, enabled=False),
+            MenuItem(lambda text: mouseText, action, enabled=False),
+            MenuItem(lambda text: flasherText, action, enabled=False),
+            MenuItem(lambda text: offscreenText, action, enabled=False),
+            MenuItem("Quit", action)
+        ))    
+        icon.run_detached()   
     sys.exit(main() or 0)
-
