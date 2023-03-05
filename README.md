@@ -42,6 +42,6 @@ Install
     j) Q key to exit daemon
       
  
- TO DO
-   - Tray icon
+ CONTRIBUTIONS
+   - Thanks to @phasermaniac with testing and icon resources. http://forum.arcadecontrols.com/index.php/topic,166121.0.html
  
