@@ -31,7 +31,7 @@ Install
     
     f) If flasher is enabled, brightness setting can be customized with -b=[1-128]
     
-    g) If flasher is endabled, delay setting can be customized with -d=n, where n are number of frames to delay input. 
+    g) If flasher is enabled, delay setting can be customized with -d=n, where n are number of frames to delay input. 
     
     h) Pressing C-Button and D-PAD directions you can recalibrate X-Axis on run-time (very useful inside games)
       - Example 1: Your gun is shooting outside on left  --> C-Button + D-PAD Left to decrase x-min absis 
