@@ -537,33 +537,20 @@ def libusb_guncon(args):
         finally:
             handle.releaseInterface(0)             
         return running
-                           
-def main():
-    global bBrightness
-    global hdc
-    global GammaArray, GammaArrayBak    
-    global calibrationText, scaleText, mouseText, flasherText, offscreenText   
-    
-    def point_type(value):
+
+def point_type(value):
         m = re.match(r"\(?(\d+)\s*,\s*(\d+)\)?", value)
         if m:
             return int(m.group(1)), int(m.group(2))
         else:
             raise ValueError("{} is an invalid point".format(value))
+                           
+def main(args):
+    global bBrightness
+    global hdc
+    global GammaArray, GammaArrayBak    
+    global calibrationText, scaleText, mouseText, flasherText, offscreenText   
 
-    parser = argparse.ArgumentParser()      
-    parser.add_argument("-tray", default=0, type=int)      
-    parser.add_argument("-index", default=1, type=int)      
-    parser.add_argument("-x", default=(175, 720), type=point_type)
-    parser.add_argument("-y", default=(20, 240), type=point_type)  
-    parser.add_argument("-scale", default=32768, type=int)  
-    parser.add_argument("-m", default=0, type=int)      
-    parser.add_argument("-b", default=128, type=int)            
-    parser.add_argument("-f", default=0, type=int)            
-    parser.add_argument("-d", default=1, type=int)            
-    parser.add_argument("-o", default=0, type=int)            
-    args = parser.parse_args()
-    
     logging.basicConfig(level=logging.INFO)   
     log.info("Using device index={}".format(args.index))
     calibrationText = "Using calibration x=({},{}) y=({},{})".format(args.x[0],args.x[1],args.y[0],args.y[1])
@@ -611,6 +598,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()      
     parser.add_argument("-tray", default=0, type=int)   
     parser.add_argument("-index", default=1, type=int)   
+    parser.add_argument("-x", default=(175, 720), type=point_type)
+    parser.add_argument("-y", default=(20, 240), type=point_type)  
+    parser.add_argument("-scale", default=32768, type=int)  
+    parser.add_argument("-m", default=0, type=int)      
+    parser.add_argument("-b", default=128, type=int)            
+    parser.add_argument("-f", default=0, type=int)            
+    parser.add_argument("-d", default=1, type=int)            
+    parser.add_argument("-o", default=0, type=int)  
     args = parser.parse_args()      
     if args.tray == 1:  
         image = Image.open("gun{}.png".format(args.index))        
@@ -623,4 +618,4 @@ if __name__ == "__main__":
             MenuItem("Quit", action)
         ))    
         icon.run_detached()   
-    sys.exit(main() or 0)
+    sys.exit(main(args) or 0)
