@@ -11,7 +11,7 @@ Install
  
  Setup
  1) Calibration tool to obtain x and y ABS. This can be innacurate. Do with 320x240 resolution
- 2) Run daemon
+ 2) Run daemon (-tray=1 if you want tray icon on status bar)
  
     a) By default, daemon runs on x and y ABS settings, you can provide other with args
     
@@ -42,6 +42,7 @@ Install
     j) Q key to exit daemon
       
  
- TO DO
-   - Tray icon
+ CONTRIBUTIONS
+   - Thanks to @sonik-br for their winusb driver and initial code
+   - Thanks to @phasermaniac with testing and icon resources. http://forum.arcadecontrols.com/index.php/topic,166121.0.html
  
